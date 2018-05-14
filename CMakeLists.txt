@@ -15,19 +15,15 @@ PROJECT (cbft)
 # GODEPSDIR - should point to a Go workspace directory containing all
 #      transitive Go dependencies
 
-SET (FTS_DEFAULT_KVSTORE "mossStore_default_kvstore")
-
 INCLUDE (FindCouchbaseGo)
 
 GoInstall (TARGET cbft PACKAGE github.com/couchbase/cbft/cmd/cbft
   GOPATH "${PROJECT_SOURCE_DIR}/../../../.." "${GODEPSDIR}"
-  GOTAGS "${FTS_DEFAULT_KVSTORE}"
   INSTALL_PATH bin OUTPUT cbft
   GOVERSION 1.9.6)
 
 GoInstall (TARGET cbft-bleve PACKAGE github.com/couchbase/cbft/cmd/cbft-bleve
   GOPATH "${PROJECT_SOURCE_DIR}/../../../.." "${GODEPSDIR}"
-  GOTAGS "${FTS_DEFAULT_KVSTORE}"
   INSTALL_PATH bin OUTPUT cbft-bleve
   GOVERSION 1.9.6)
 
