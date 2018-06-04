@@ -37,6 +37,8 @@ import (
 	bleveMappingUI "github.com/blevesearch/bleve-mapping-ui"
 	_ "github.com/blevesearch/bleve/config"
 	bleveHttp "github.com/blevesearch/bleve/http"
+	"github.com/blevesearch/bleve/index/scorch"
+	"github.com/blevesearch/bleve/index/upsidedown"
 	"github.com/blevesearch/bleve/mapping"
 	bleveRegistry "github.com/blevesearch/bleve/registry"
 
@@ -50,6 +52,10 @@ import (
 
 var BatchBytesAdded uint64
 var BatchBytesRemoved uint64
+
+var featureIndexType = "indexType"
+var FeatureScorchIndex = featureIndexType + ":" + scorch.Name
+var FeatureUpsidedownIndex = featureIndexType + ":" + upsidedown.Name
 
 var BleveMaxOpsPerBatch = 200 // Unlimited when <= 0.
 
@@ -282,8 +288,52 @@ func init() {
 	})
 }
 
+var CurrentNodeDefsFetcher *NodeDefsFetcher
+
+type NodeDefsFetcher struct {
+	mgr *cbgt.Manager
+}
+
+func (ndf *NodeDefsFetcher) SetManager(mgr *cbgt.Manager) {
+	ndf.mgr = mgr
+}
+
+func (ndf *NodeDefsFetcher) Get() (*cbgt.NodeDefs, error) {
+	if ndf.mgr != nil {
+		return ndf.mgr.GetNodeDefs(cbgt.NODE_DEFS_WANTED, true)
+	}
+	return nil, fmt.Errorf("NodeDefsFetcher Get(): mgr is nil!")
+}
+
 func ValidateBleve(indexType, indexName, indexParams string) error {
 	if len(indexParams) <= 0 {
+		return nil
+	}
+
+	validateBleveIndexType := func(content interface{}) error {
+		if CurrentNodeDefsFetcher == nil {
+			return nil
+		}
+
+		nodeDefs, err := CurrentNodeDefsFetcher.Get()
+		if err != nil {
+			return fmt.Errorf("bleve: validation failed: err: %v", err)
+		}
+
+		indexType := ""
+		if entries, ok := content.(map[string]interface{}); ok {
+			indexType = entries["indexType"].(string)
+		}
+
+		if indexType != upsidedown.Name {
+			// Validate any indexType except upsidedown (to support pre-5.5)
+			if !cbgt.IsFeatureSupportedByCluster(featureIndexType+":"+indexType, nodeDefs) {
+				return fmt.Errorf("bleve: index validation failed:"+
+					" indexType: %v not supported on all nodes in"+
+					" cluster", indexType)
+			}
+		}
+
 		return nil
 	}
 
@@ -295,6 +345,14 @@ func ValidateBleve(indexType, indexName, indexParams string) error {
 			// Ignore the JSON unmarshalling error, if in the case
 			// indexParams isn't JSON.
 			return nil
+		}
+
+		store, found := iParams["store"]
+		if found {
+			err = validateBleveIndexType(store)
+			if err != nil {
+				return err
+			}
 		}
 
 		mapping, found := iParams["mapping"]
@@ -327,7 +385,7 @@ func ValidateBleve(indexType, indexName, indexParams string) error {
 			case "truncate_token":
 				if param["length"].(float64) < 0 {
 					return fmt.Errorf("bleve: token_filter validation failed"+
-						"for %v => length(%v) < 0", param["type"], param["length"])
+						" for %v => length(%v) < 0", param["type"], param["length"])
 				}
 			default:
 				break
