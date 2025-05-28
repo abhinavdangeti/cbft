@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/document"
@@ -45,6 +46,9 @@ func init() {
 	if err != nil {
 		log.Warnf("knn regex compilation failed, knn query throttler will be disabled")
 	}
+
+	scorch.BleveVectorSearchBatchExecution = true
+	scorch.BleveVectorSearchBatchExecutionDelay = time.Duration(50 * time.Millisecond)
 
 	if runtime.GOOS == "windows" {
 		scorch.BleveMaxKNNConcurrency = 1
